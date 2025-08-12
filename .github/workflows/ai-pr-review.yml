@@ -2,34 +2,256 @@ name: AI PR Review
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
 
 permissions:
   contents: read
   pull-requests: write
+  issues: write
 
 concurrency:
-  group: ai-pr-review-${{ github.event.pull_request.head.sha || github.run_id }}
+  group: ai-pr-review-${{ github.event.pull_request.base.repo.full_name }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  review:
-    name: Run AI PR Review (Bedrock Claude Sonnet)
+  ai_review:
+    # Skip drafts and skip if no API key is configured
+    if: ${{ github.event.pull_request.draft == false && secrets.OPENAI_API_KEY != '' }}
     runs-on: ubuntu-latest
-    if: ${{ !github.event.pull_request.draft }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: AI PR Review (Bedrock via local action)
-        uses: ./.github/actions/auto-reviewer
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws_region: ${{ secrets.AWS_REGION || 'us-east-1' }}
-          # Prefer model id; fall back to inference profile ARN if you use it
-          model_name: ${{ secrets.BEDROCK_MODEL_ID || secrets.BEDROCK_INFERENCE_PROFILE_ARN || 'anthropic.claude-3-sonnet-20240229-v1:0' }}
-          model_temperature: ${{ vars.LLM_TEMPERATURE || '0.2' }}
-          exclude_files: '*.js, *.json, *.md, *.yml, *.js.map, .node-version'
 
+    steps:
+      # IMPORTANT: Do NOT check out PR code in pull_request_target for security reasons.
+      - name: AI review PR with OpenAI
+        uses: actions/github-script@v7
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+          OPENAI_MODEL: ${{ vars.AI_PR_REVIEW_MODEL }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = pr.number;
+
+            // Helper: glob match using minimatch semantics implemented manually for simple patterns via minimatch-like library is unavailable here.
+            // We'll use picomatch pattern engine by fetching file from repo? Not available. Instead, rely on minimatch via a tiny implementation.
+            // Implement a minimal glob matcher supporting **, *, ? using path-to-regexp conversion.
+            function globToRegExp(glob) {
+              const specialChars = /[\\^$+?.()|{}\[\]]/g;
+              let reStr = '^';
+              let i = 0;
+              while (i < glob.length) {
+                const c = glob[i];
+                if (c === '*') {
+                  if (glob[i + 1] === '*') {
+                    // **
+                    // Match any path segments
+                    reStr += '.*';
+                    i += 2;
+                    // Support /**/ or **/
+                    continue;
+                  } else {
+                    reStr += '[^/]*';
+                    i += 1;
+                    continue;
+                  }
+                } else if (c === '?') {
+                  reStr += '[^/]';
+                  i += 1;
+                  continue;
+                } else if (c === '/') {
+                  reStr += '/';
+                  i += 1;
+                  continue;
+                } else {
+                  reStr += c.replace(specialChars, r => '\\' + r);
+                  i += 1;
+                }
+              }
+              reStr += '$';
+              return new RegExp(reStr);
+            }
+            function matchesAny(path, patterns) {
+              if (!patterns || patterns.length === 0) return true; // if no include patterns, include all
+              for (const p of patterns) {
+                try {
+                  const rx = globToRegExp(p);
+                  if (rx.test(path)) return true;
+                } catch (e) {
+                  // ignore invalid pattern
+                }
+              }
+              return false;
+            }
+            function matchesNone(path, patterns) {
+              if (!patterns || patterns.length === 0) return true;
+              for (const p of patterns) {
+                try {
+                  const rx = globToRegExp(p);
+                  if (rx.test(path)) return false;
+                } catch (e) {}
+              }
+              return true;
+            }
+
+            // 0) Load optional repo config via REST API contents.get
+            let config = null;
+            try {
+              const cfg = await github.rest.repos.getContent({
+                owner, repo, path: '.github/ai-pr-review.config.yml', ref: pr.base.sha
+              });
+              if (Array.isArray(cfg.data)) {
+                // it's a directory - ignore
+              } else {
+                const content = Buffer.from(cfg.data.content, cfg.data.encoding || 'base64').toString('utf8');
+                // basic YAML parser for our simple structure
+                function parseYaml(y) {
+                  // This is a minimal YAML parser for key: value and simple arrays. Not full YAML.
+                  const lines = y.split(/\r?\n/);
+                  const out = {};
+                  let currentKey = null;
+                  for (let raw of lines) {
+                    const line = raw.trimEnd();
+                    if (!line || line.trimStart().startsWith('#')) continue;
+                    if (line.includes(':') && !line.trimStart().startsWith('-')) {
+                      const idx = line.indexOf(':');
+                      currentKey = line.slice(0, idx).trim();
+                      let val = line.slice(idx + 1).trim();
+                      if (val === '') {
+                        out[currentKey] = [];
+                      } else {
+                        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                          val = val.slice(1, -1);
+                        }
+                        const num = Number(val);
+                        out[currentKey] = Number.isNaN(num) ? val : num;
+                        currentKey = null;
+                      }
+                    } else if (line.trimStart().startsWith('-')) {
+                      if (!currentKey) continue;
+                      let item = line.trimStart().replace(/^-\s*/, '');
+                      if ((item.startsWith('"') && item.endsWith('"')) || (item.startsWith("'") && item.endsWith("'"))) {
+                        item = item.slice(1, -1);
+                      }
+                      if (!Array.isArray(out[currentKey])) out[currentKey] = [];
+                      out[currentKey].push(item);
+                    }
+                  }
+                  return out;
+                }
+                config = parseYaml(content);
+              }
+            } catch (e) {
+              core.info('No .github/ai-pr-review.config.yml found or failed to parse, using defaults.');
+            }
+
+            // Defaults
+            const MAX_CHARS_DEFAULT = 16000;
+            const model = (process.env.OPENAI_MODEL || (config && config.model) || 'gpt-4o-mini');
+            const systemPrompt = (config && config.system_prompt) || 'You are a senior software engineer performing strict code reviews.';
+            const includePatterns = (config && config.include_patterns) || null; // null means include all
+            const excludePatterns = (config && config.exclude_patterns) || [];
+            const MAX_CHARS = Number(config && config.max_chars) || MAX_CHARS_DEFAULT;
+
+            // 1) Collect changed files + unified patches via the API (safe in pull_request_target).
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: prNumber, per_page: 100
+            });
+
+            // Apply include/exclude filters by filename
+            const filtered = files.filter(f => {
+              const path = f.filename || '';
+              return matchesAny(path, includePatterns) && matchesNone(path, excludePatterns);
+            });
+
+            // Build compact diff context, capped by character budget to respect model limits.
+            let budget = MAX_CHARS;
+            const parts = [];
+            for (const f of filtered) {
+              if (!f.patch) continue; // binary or too-large files may omit patches
+              const header = `File: ${f.filename}\n`;
+              const content = header + f.patch + "\n\n";
+              if (content.length <= budget) {
+                parts.push(content);
+                budget -= content.length;
+              } else if (budget > 500) {
+                parts.push(content.slice(0, budget));
+                budget = 0;
+                break;
+              } else {
+                break;
+              }
+            }
+
+            if (parts.length === 0) {
+              core.info('No reviewable patch content after applying filters. Skipping.');
+              return;
+            }
+
+            // 2) Compose the prompt.
+            const userPrompt =
+              "You are an expert code reviewer. Review the following unified diffs and provide actionable, concise feedback:\n" +
+              "- Identify bugs, security issues, performance problems, anti-patterns, and test coverage gaps.\n" +
+              "- Reference files and approximate lines where relevant.\n" +
+              "- Suggest concrete improvements. If overall OK, say: 'LGTM with minor nits' then list nits.\n\n" +
+              parts.join('\n');
+
+            // 3) Call the LLM.
+            const apiKey = process.env.OPENAI_API_KEY;
+            if (!apiKey) {
+              core.setFailed('OPENAI_API_KEY is not set.');
+            }
+            const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+
+            const body = {
+              model,
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: userPrompt }
+              ],
+              temperature: 0.2
+            };
+
+            const res = await fetch(`${baseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+              body: JSON.stringify(body)
+            });
+
+            if (!res.ok) {
+              const errText = await res.text();
+              core.setFailed(`OpenAI API error ${res.status}: ${errText}`);
+            }
+
+            const data = await res.json();
+            const review = (data.choices?.[0]?.message?.content || '').trim();
+            if (!review) {
+              core.info('Model returned empty content. Skipping comment.');
+              return;
+            }
+
+            // 4) Upsert a single persistent review comment to avoid spam.
+            const marker = '<!-- ai-pr-review -->';
+            const commentBody = `${marker}
+            AI PR Review (model: ${model})
+
+            ${review}`;
+
+            const existing = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: prNumber, per_page: 100
+            });
+            const prior = existing.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+
+            if (prior) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: prior.id, body: commentBody
+              });
+              core.info('Updated existing AI review comment.');
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body: commentBody
+              });
+              core.info('Posted new AI review comment.');
+            }

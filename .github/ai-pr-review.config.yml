@@ -1,0 +1,11 @@
+model: gpt-4o-mini
+max_chars: 16000
+include_patterns:
+  - src/**
+  - app/**
+exclude_patterns:
+  - "**/*.lock"
+  - "**/dist/**"
+  - docs/**
+system_prompt: "You are a senior engineer performing strict, constructive code reviews."
+
