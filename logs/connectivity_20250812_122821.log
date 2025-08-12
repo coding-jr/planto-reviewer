@@ -1,0 +1,6 @@
+Claude test error: Error: No value provided for input HTTP label: modelId.
+    at resolvedPath (/Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:486:11)
+    at /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:545:19
+    at RequestBuilder.build (/Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/core/dist-cjs/submodules/protocols/index.js:511:7)
+
+EXIT_CODE=0

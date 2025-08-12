@@ -1,0 +1,2 @@
+Connectivity check failed: HTTP 415 - {"message":"Unsupported 'Accept' header: 'text/plain'. Must accept 'application/json'.","documentation_url":"https://docs.github.com/v3/media","status":"415"}
+\nConnectivity validation failed. See log: logs/connectivity_20250812_123134.log

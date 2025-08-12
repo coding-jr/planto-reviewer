@@ -1,0 +1,64 @@
+Testing model: anthropic.claude-3-haiku-20240307-v1:0
+Claude test error: ValidationException: Invalid API version: 2023-06-01
+    at de_ValidationExceptionRes (/Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/index.js:1934:21)
+    at de_CommandError (/Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/index.js:1751:19)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/middleware-serde/dist-cjs/index.js:36:20
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/core/dist-cjs/index.js:193:18
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/middleware-retry/dist-cjs/index.js:320:38
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:33:22 {
+  '$fault': 'client',
+  '$metadata': {
+    httpStatusCode: 400,
+    requestId: 'b855eacb-e7a1-4811-a5e7-51878192493b',
+    extendedRequestId: undefined,
+    cfId: undefined,
+    attempts: 1,
+    totalRetryDelay: 0
+  }
+}
+Model failed: anthropic.claude-3-haiku-20240307-v1:0
+----
+Testing model: anthropic.claude-3-5-haiku-20241022-v1:0
+Claude test error: ValidationException: The provided model identifier is invalid.
+    at de_ValidationExceptionRes (/Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/index.js:1934:21)
+    at de_CommandError (/Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/index.js:1751:19)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/middleware-serde/dist-cjs/index.js:36:20
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/core/dist-cjs/index.js:193:18
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/middleware-retry/dist-cjs/index.js:320:38
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:33:22 {
+  '$fault': 'client',
+  '$metadata': {
+    httpStatusCode: 400,
+    requestId: '5e44c22b-f9b5-4ed4-9a22-7df82a21d9e6',
+    extendedRequestId: undefined,
+    cfId: undefined,
+    attempts: 1,
+    totalRetryDelay: 0
+  }
+}
+Model failed: anthropic.claude-3-5-haiku-20241022-v1:0
+----
+Testing model: anthropic.claude-3-opus-20240229-v1:0
+Claude test error: ValidationException: The provided model identifier is invalid.
+    at de_ValidationExceptionRes (/Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/index.js:1934:21)
+    at de_CommandError (/Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/index.js:1751:19)
+    at processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/middleware-serde/dist-cjs/index.js:36:20
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/core/dist-cjs/index.js:193:18
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@smithy/middleware-retry/dist-cjs/index.js:320:38
+    at async /Users/princeofpersia/Desktop/AutoReviewer/node_modules/@aws-sdk/middleware-logger/dist-cjs/index.js:33:22 {
+  '$fault': 'client',
+  '$metadata': {
+    httpStatusCode: 400,
+    requestId: '6715e7ad-b9c9-442a-b601-bb6343983049',
+    extendedRequestId: undefined,
+    cfId: undefined,
+    attempts: 1,
+    totalRetryDelay: 0
+  }
+}
+Model failed: anthropic.claude-3-opus-20240229-v1:0
+----
+\nConnectivity validation failed for all candidates. See log: logs/connectivity_20250812_122952.log

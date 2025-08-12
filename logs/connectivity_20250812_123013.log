@@ -1,0 +1,45 @@
+Testing model: anthropic.claude-3-haiku-20240307-v1:0
+/Users/princeofpersia/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:859
+    return new TSError(diagnosticText, diagnosticCodes, diagnostics);
+           ^
+TSError: ⨯ Unable to compile TypeScript:
+claudeTest.ts(26,5): error TS18004: No value exists in scope for the shorthand property 'Return'. Either declare one or provide an initializer.
+claudeTest.ts(26,12): error TS18004: No value exists in scope for the shorthand property 'only'. Either declare one or provide an initializer.
+claudeTest.ts(26,17): error TS18004: No value exists in scope for the shorthand property 'the'. Either declare one or provide an initializer.
+claudeTest.ts(26,21): error TS18004: No value exists in scope for the shorthand property 'final'. Either declare one or provide an initializer.
+claudeTest.ts(26,27): error TS18004: No value exists in scope for the shorthand property 'answer'. Either declare one or provide an initializer.
+claudeTest.ts(26,35): error TS18004: No value exists in scope for the shorthand property 'no'. Either declare one or provide an initializer.
+claudeTest.ts(26,38): error TS18004: No value exists in scope for the shorthand property 'preamble'. Either declare one or provide an initializer.
+claudeTest.ts(27,5): error TS2552: Cannot find name 'messages'. Did you mean 'onmessage'?
+claudeTest.ts(25,54): error TS1002: Unterminated string literal.
+claudeTest.ts(26,5): error TS1005: ',' expected.
+claudeTest.ts(26,12): error TS1005: ',' expected.
+claudeTest.ts(26,17): error TS1005: ',' expected.
+claudeTest.ts(26,21): error TS1005: ',' expected.
+claudeTest.ts(26,27): error TS1005: ',' expected.
+claudeTest.ts(26,38): error TS1005: ',' expected.
+claudeTest.ts(26,46): error TS1005: ',' expected.
+claudeTest.ts(26,47): error TS1003: Identifier expected.
+claudeTest.ts(26,49): error TS1002: Unterminated string literal.
+claudeTest.ts(27,5): error TS1005: ':' expected.
+claudeTest.ts(27,13): error TS1005: ',' expected.
+
+    at createTSError (/Users/princeofpersia/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:859:12)
+    at reportTSError (/Users/princeofpersia/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:863:19)
+    at getOutput (/Users/princeofpersia/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1077:36)
+    at Object.compile (/Users/princeofpersia/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1433:41)
+    at Module.m._compile (/Users/princeofpersia/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1617:30)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1613:10)
+    at Object.require.extensions.<computed> [as .ts] (/Users/princeofpersia/.npm/_npx/1bf7c3c15bf47d04/node_modules/ts-node/src/index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1275:32)
+    at Function.Module._load (node:internal/modules/cjs/loader:1096:12)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:164:12) {
+  diagnosticCodes: [
+    18004, 18004, 18004, 18004,
+    18004, 18004, 18004,  2552,
+     1002,  1005,  1005,  1005,
+     1005,  1005,  1005,  1005,
+     1003,  1002,  1005,  1005
+  ]
+}
+\nConnectivity validation failed. See log: logs/connectivity_20250812_123013.log
