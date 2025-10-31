@@ -18,7 +18,7 @@ func NewMetricsService(db *gorm.DB) *MetricsService {
 
 // UpdateDeveloperMetrics calculates and updates metrics for a developer
 func (s *MetricsService) UpdateDeveloperMetrics(developerID uint64) error {
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().Truncate(24 * time.Hour)
 
 	// Get developer info
 	var dev models.Developer
@@ -34,7 +34,7 @@ func (s *MetricsService) UpdateDeveloperMetrics(developerID uint64) error {
 
 	// Check if metrics exist for today
 	var existing models.DeveloperMetric
-	err = s.db.Where("developer_id = ? AND metric_date = ?", developerID, today).
+	err = s.db.Where("developer_id = ? AND DATE(metric_date) = DATE(?)", developerID, today).
 		First(&existing).Error
 
 	if err == gorm.ErrRecordNotFound {
@@ -57,64 +57,66 @@ func (s *MetricsService) UpdateDeveloperMetrics(developerID uint64) error {
 }
 
 // calculateDeveloperMetrics calculates metrics for a developer for a specific date
-func (s *MetricsService) calculateDeveloperMetrics(developerID uint64, date string) (*models.DeveloperMetric, error) {
+func (s *MetricsService) calculateDeveloperMetrics(developerID uint64, date time.Time) (*models.DeveloperMetric, error) {
 	var dev models.Developer
 	if err := s.db.First(&dev, developerID).Error; err != nil {
 		return nil, err
 	}
 
+	dateStr := date.Format("2006-01-02")
+
 	// Count PRs for the date
 	var totalPRs int64
 	s.db.Model(&models.PullRequest{}).
-		Where("developer_id = ? AND DATE(github_created_at) = ?", developerID, date).
+		Where("developer_id = ? AND DATE(github_created_at) = ?", developerID, dateStr).
 		Count(&totalPRs)
 
 	// Count total issues found
 	var totalIssues int64
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ?", developerID, date).
+		Where("developer_id = ? AND DATE(created_at) = ?", developerID, dateStr).
 		Count(&totalIssues)
 
 	// Count issues by type
 	var nullCheckIssues, logicErrorIssues, scalabilityIssues, securityIssues, performanceIssues int64
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, date, "null_check").
+		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, dateStr, "null_check").
 		Count(&nullCheckIssues)
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, date, "logic_error").
+		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, dateStr, "logic_error").
 		Count(&logicErrorIssues)
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, date, "scalability").
+		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, dateStr, "scalability").
 		Count(&scalabilityIssues)
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, date, "security").
+		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, dateStr, "security").
 		Count(&securityIssues)
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, date, "performance").
+		Where("developer_id = ? AND DATE(created_at) = ? AND issue_type = ?", developerID, dateStr, "performance").
 		Count(&performanceIssues)
 
 	// Count issues by severity
 	var criticalIssues, highIssues, mediumIssues, lowIssues int64
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND severity = ?", developerID, date, "critical").
+		Where("developer_id = ? AND DATE(created_at) = ? AND severity = ?", developerID, dateStr, "critical").
 		Count(&criticalIssues)
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND severity = ?", developerID, date, "high").
+		Where("developer_id = ? AND DATE(created_at) = ? AND severity = ?", developerID, dateStr, "high").
 		Count(&highIssues)
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND severity = ?", developerID, date, "medium").
+		Where("developer_id = ? AND DATE(created_at) = ? AND severity = ?", developerID, dateStr, "medium").
 		Count(&mediumIssues)
 
 	s.db.Model(&models.Issue{}).
-		Where("developer_id = ? AND DATE(created_at) = ? AND severity = ?", developerID, date, "low").
+		Where("developer_id = ? AND DATE(created_at) = ? AND severity = ?", developerID, dateStr, "low").
 		Count(&lowIssues)
 
 	// Calculate average code quality score
@@ -123,7 +125,7 @@ func (s *MetricsService) calculateDeveloperMetrics(developerID uint64, date stri
 	}
 	s.db.Model(&models.PullRequest{}).
 		Select("COALESCE(AVG(code_quality_score), 0) as score").
-		Where("developer_id = ? AND DATE(github_created_at) = ? AND code_quality_score > 0", developerID, date).
+		Where("developer_id = ? AND DATE(github_created_at) = ? AND code_quality_score IS NOT NULL", developerID, dateStr).
 		Scan(&avgQuality)
 
 	// Calculate total lines of code
@@ -133,35 +135,34 @@ func (s *MetricsService) calculateDeveloperMetrics(developerID uint64, date stri
 	}
 	s.db.Model(&models.PullRequest{}).
 		Select("COALESCE(SUM(lines_added), 0) as added, COALESCE(SUM(lines_deleted), 0) as deleted").
-		Where("developer_id = ? AND DATE(github_created_at) = ?", developerID, date).
+		Where("developer_id = ? AND DATE(github_created_at) = ?", developerID, dateStr).
 		Scan(&linesOfCode)
 
-	totalLinesOfCode := linesOfCode.Added + linesOfCode.Deleted
-
-	// Calculate issues per PR
-	issuesPerPR := 0.0
+	// Calculate average PR size
+	avgPRSize := 0.0
 	if totalPRs > 0 {
-		issuesPerPR = float64(totalIssues) / float64(totalPRs)
+		avgPRSize = float64(linesOfCode.Added+linesOfCode.Deleted) / float64(totalPRs)
 	}
 
 	metrics := &models.DeveloperMetric{
-		DeveloperID:         developerID,
-		OrganizationID:      dev.OrganizationID,
-		MetricDate:          date,
-		TotalPRs:            int(totalPRs),
-		TotalIssuesFound:    int(totalIssues),
-		CodeQualityScore:    avgQuality.Score,
-		NullCheckIssues:     int(nullCheckIssues),
-		LogicErrorIssues:    int(logicErrorIssues),
-		ScalabilityIssues:   int(scalabilityIssues),
-		SecurityIssues:      int(securityIssues),
-		PerformanceIssues:   int(performanceIssues),
-		CriticalIssues:      int(criticalIssues),
-		HighIssues:          int(highIssues),
-		MediumIssues:        int(mediumIssues),
-		LowIssues:           int(lowIssues),
-		TotalLinesOfCode:    int(totalLinesOfCode),
-		IssuesPerPR:         issuesPerPR,
+		DeveloperID:       developerID,
+		OrganizationID:    dev.OrganizationID,
+		MetricDate:        date,
+		TotalPRs:          int(totalPRs),
+		TotalIssuesFound:  int(totalIssues),
+		CodeQualityScore:  avgQuality.Score,
+		NullCheckIssues:   int(nullCheckIssues),
+		LogicErrorIssues:  int(logicErrorIssues),
+		ScalabilityIssues: int(scalabilityIssues),
+		SecurityIssues:    int(securityIssues),
+		PerformanceIssues: int(performanceIssues),
+		CriticalIssues:    int(criticalIssues),
+		HighIssues:        int(highIssues),
+		MediumIssues:      int(mediumIssues),
+		LowIssues:         int(lowIssues),
+		LinesAdded:        int(linesOfCode.Added),
+		LinesDeleted:      int(linesOfCode.Deleted),
+		AvgPRSize:         avgPRSize,
 	}
 
 	return metrics, nil
@@ -169,7 +170,7 @@ func (s *MetricsService) calculateDeveloperMetrics(developerID uint64, date stri
 
 // UpdateOrganizationMetrics calculates and updates metrics for an organization
 func (s *MetricsService) UpdateOrganizationMetrics(orgID uint64) error {
-	today := time.Now().Format("2006-01-02")
+	today := time.Now().Truncate(24 * time.Hour)
 
 	// Calculate metrics for today
 	metrics, err := s.calculateOrganizationMetrics(orgID, today)
@@ -179,7 +180,7 @@ func (s *MetricsService) UpdateOrganizationMetrics(orgID uint64) error {
 
 	// Check if metrics exist for today
 	var existing models.OrganizationMetric
-	err = s.db.Where("organization_id = ? AND metric_date = ?", orgID, today).
+	err = s.db.Where("organization_id = ? AND DATE(metric_date) = DATE(?)", orgID, today).
 		First(&existing).Error
 
 	if err == gorm.ErrRecordNotFound {
@@ -202,7 +203,9 @@ func (s *MetricsService) UpdateOrganizationMetrics(orgID uint64) error {
 }
 
 // calculateOrganizationMetrics calculates metrics for an organization for a specific date
-func (s *MetricsService) calculateOrganizationMetrics(orgID uint64, date string) (*models.OrganizationMetric, error) {
+func (s *MetricsService) calculateOrganizationMetrics(orgID uint64, date time.Time) (*models.OrganizationMetric, error) {
+	dateStr := date.Format("2006-01-02")
+
 	// Count total developers
 	var totalDevelopers int64
 	s.db.Model(&models.Developer{}).
@@ -212,56 +215,14 @@ func (s *MetricsService) calculateOrganizationMetrics(orgID uint64, date string)
 	// Count PRs for the date
 	var totalPRs int64
 	s.db.Model(&models.PullRequest{}).
-		Where("organization_id = ? AND DATE(github_created_at) = ?", orgID, date).
+		Where("organization_id = ? AND DATE(github_created_at) = ?", orgID, dateStr).
 		Count(&totalPRs)
 
 	// Count total issues
 	var totalIssues int64
 	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ?", orgID, date).
+		Where("organization_id = ? AND DATE(created_at) = ?", orgID, dateStr).
 		Count(&totalIssues)
-
-	// Count issues by type
-	var nullCheckIssues, logicErrorIssues, scalabilityIssues, securityIssues, performanceIssues int64
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND issue_type = ?", orgID, date, "null_check").
-		Count(&nullCheckIssues)
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND issue_type = ?", orgID, date, "logic_error").
-		Count(&logicErrorIssues)
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND issue_type = ?", orgID, date, "scalability").
-		Count(&scalabilityIssues)
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND issue_type = ?", orgID, date, "security").
-		Count(&securityIssues)
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND issue_type = ?", orgID, date, "performance").
-		Count(&performanceIssues)
-
-	// Count issues by severity
-	var criticalIssues, highIssues, mediumIssues, lowIssues int64
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND severity = ?", orgID, date, "critical").
-		Count(&criticalIssues)
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND severity = ?", orgID, date, "high").
-		Count(&highIssues)
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND severity = ?", orgID, date, "medium").
-		Count(&mediumIssues)
-
-	s.db.Model(&models.Issue{}).
-		Where("organization_id = ? AND DATE(created_at) = ? AND severity = ?", orgID, date, "low").
-		Count(&lowIssues)
 
 	// Calculate average code quality score
 	var avgQuality struct {
@@ -269,38 +230,23 @@ func (s *MetricsService) calculateOrganizationMetrics(orgID uint64, date string)
 	}
 	s.db.Model(&models.PullRequest{}).
 		Select("COALESCE(AVG(code_quality_score), 0) as score").
-		Where("organization_id = ? AND DATE(github_created_at) = ? AND code_quality_score > 0", orgID, date).
+		Where("organization_id = ? AND DATE(github_created_at) = ? AND code_quality_score IS NOT NULL", orgID, dateStr).
 		Scan(&avgQuality)
 
-	// Calculate total lines of code
-	var linesOfCode struct {
-		Added   int64
-		Deleted int64
+	// Calculate average issues per PR
+	avgIssuesPerPR := 0.0
+	if totalPRs > 0 {
+		avgIssuesPerPR = float64(totalIssues) / float64(totalPRs)
 	}
-	s.db.Model(&models.PullRequest{}).
-		Select("COALESCE(SUM(lines_added), 0) as added, COALESCE(SUM(lines_deleted), 0) as deleted").
-		Where("organization_id = ? AND DATE(github_created_at) = ?", orgID, date).
-		Scan(&linesOfCode)
-
-	totalLinesOfCode := linesOfCode.Added + linesOfCode.Deleted
 
 	metrics := &models.OrganizationMetric{
-		OrganizationID:    orgID,
-		MetricDate:        date,
-		TotalDevelopers:   int(totalDevelopers),
-		TotalPRs:          int(totalPRs),
-		TotalIssuesFound:  int(totalIssues),
-		AvgQualityScore:   avgQuality.Score,
-		NullCheckIssues:   int(nullCheckIssues),
-		LogicErrorIssues:  int(logicErrorIssues),
-		ScalabilityIssues: int(scalabilityIssues),
-		SecurityIssues:    int(securityIssues),
-		PerformanceIssues: int(performanceIssues),
-		CriticalIssues:    int(criticalIssues),
-		HighIssues:        int(highIssues),
-		MediumIssues:      int(mediumIssues),
-		LowIssues:         int(lowIssues),
-		TotalLinesOfCode:  int(totalLinesOfCode),
+		OrganizationID:      orgID,
+		MetricDate:          date,
+		TotalDevelopers:     int(totalDevelopers),
+		TotalPRs:            int(totalPRs),
+		TotalIssuesFound:    int(totalIssues),
+		AvgIssuesPerPR:      avgIssuesPerPR,
+		AvgCodeQualityScore: avgQuality.Score,
 	}
 
 	return metrics, nil

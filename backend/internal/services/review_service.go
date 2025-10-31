@@ -119,6 +119,8 @@ func (s *ReviewService) saveReview(pr *models.PullRequest, result *ai.ReviewResu
 		CodeQualityScore: result.CodeQualityScore,
 		IssuesFoundCount: len(result.Issues),
 		ReviewedAt:       time.Now(),
+		ReviewType:       "code_review",
+		Status:           "completed",
 	}
 
 	if err := tx.Create(review).Error; err != nil {
@@ -128,6 +130,11 @@ func (s *ReviewService) saveReview(pr *models.PullRequest, result *ai.ReviewResu
 
 	// Save issues
 	for _, aiIssue := range result.Issues {
+		filePath := ""
+		if aiIssue.FileName != nil {
+			filePath = *aiIssue.FileName
+		}
+
 		issue := &models.Issue{
 			ReviewID:       review.ID,
 			PullRequestID:  pr.ID,
@@ -140,7 +147,7 @@ func (s *ReviewService) saveReview(pr *models.PullRequest, result *ai.ReviewResu
 			Suggestion:     aiIssue.Suggestion,
 			CodeSnippet:    aiIssue.CodeSnippet,
 			LineNumber:     aiIssue.LineNumber,
-			FileName:       aiIssue.FileName,
+			FilePath:       filePath,
 			IsResolved:     false,
 		}
 

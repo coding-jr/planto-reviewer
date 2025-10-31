@@ -26,7 +26,6 @@ func main() {
 
 	// Initialize repositories
 	orgRepo := repositories.NewOrganizationRepository(db)
-	devRepo := repositories.NewDeveloperRepository(db)
 
 	// Initialize handlers
 	orgHandler := handlers.NewOrganizationHandler(orgRepo)

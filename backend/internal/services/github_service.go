@@ -3,8 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
 
 	"github.com/coding-jr/planto-reviewer/backend/internal/models"
 	"github.com/google/go-github/v57/github"
@@ -102,7 +100,7 @@ func (s *GitHubService) savePR(ctx context.Context, client *github.Client, org *
 	}
 
 	// Update if PR was updated after our last check
-	if ghPR.UpdatedAt != nil && existingPR.GithubUpdatedAt.Before(*ghPR.UpdatedAt) {
+	if ghPR.UpdatedAt != nil && existingPR.GithubUpdatedAt.Before(ghPR.UpdatedAt.Time) {
 		return s.updatePR(ctx, client, org, &existingPR, ghPR)
 	}
 
@@ -141,11 +139,13 @@ func (s *GitHubService) createPR(ctx context.Context, client *github.Client, org
 		RepositoryID:     repo.ID,
 		OrganizationID:   org.ID,
 		DeveloperID:      dev.ID,
+		GithubID:         uint64(*ghPR.ID),
 		PRNumber:         uint(*ghPR.Number),
 		Title:            *ghPR.Title,
 		State:            *ghPR.State,
-		GithubCreatedAt:  *ghPR.CreatedAt,
-		GithubUpdatedAt:  *ghPR.UpdatedAt,
+		GithubCreatedAt:  ghPR.CreatedAt.Time,
+		GithubUpdatedAt:  ghPR.UpdatedAt.Time,
+		OpenedAt:         ghPR.CreatedAt.Time,
 		LinesAdded:       additions,
 		LinesDeleted:     deletions,
 		FilesChanged:     changedFiles,
@@ -154,7 +154,13 @@ func (s *GitHubService) createPR(ctx context.Context, client *github.Client, org
 	}
 
 	if ghPR.MergedAt != nil {
-		pr.GithubMergedAt = ghPR.MergedAt
+		mergedAt := ghPR.MergedAt.Time
+		pr.GithubMergedAt = &mergedAt
+		pr.MergedAt = &mergedAt
+	}
+	if ghPR.ClosedAt != nil {
+		closedAt := ghPR.ClosedAt.Time
+		pr.ClosedAt = &closedAt
 	}
 
 	if err := s.db.Create(pr).Error; err != nil {
@@ -167,21 +173,33 @@ func (s *GitHubService) createPR(ctx context.Context, client *github.Client, org
 
 // updatePR updates an existing PR record
 func (s *GitHubService) updatePR(ctx context.Context, client *github.Client, org *models.Organization, pr *models.PullRequest, ghPR *github.PullRequest) error {
+	// Get repo name
+	var repo models.Repository
+	if err := s.db.First(&repo, pr.RepositoryID).Error; err != nil {
+		return fmt.Errorf("failed to fetch repository: %w", err)
+	}
+
 	// Fetch latest diff if PR was updated
-	diff, err := s.fetchPRDiff(ctx, client, org.GithubOrgName, "", int(*ghPR.Number))
+	diff, err := s.fetchPRDiff(ctx, client, org.GithubOrgName, repo.Name, int(*ghPR.Number))
 	if err != nil {
 		return fmt.Errorf("failed to fetch PR diff: %w", err)
 	}
 
 	updates := map[string]interface{}{
 		"state":              *ghPR.State,
-		"github_updated_at":  *ghPR.UpdatedAt,
+		"github_updated_at":  ghPR.UpdatedAt.Time,
 		"pr_diff":            diff,
 		"needs_review":       true, // Mark for re-review
 	}
 
 	if ghPR.MergedAt != nil {
-		updates["github_merged_at"] = *ghPR.MergedAt
+		mergedAt := ghPR.MergedAt.Time
+		updates["github_merged_at"] = mergedAt
+		updates["merged_at"] = mergedAt
+	}
+
+	if ghPR.ClosedAt != nil {
+		updates["closed_at"] = ghPR.ClosedAt.Time
 	}
 
 	if err := s.db.Model(pr).Updates(updates).Error; err != nil {
