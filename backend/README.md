@@ -45,6 +45,13 @@ cp .env.example .env
 # Edit .env with your settings
 ```
 
+**Important configuration:**
+- `DATABASE_URL` - MySQL connection string
+- `AI_PROVIDER` - Choose: `openai`, `anthropic`, or `google`
+- `AI_API_KEY` - Your AI provider API key
+- `API_KEY` - API key for authenticating requests
+- `POLLING_INTERVAL` - How often to check for new PRs (seconds, default: 30)
+
 ### 4. Install Dependencies
 
 ```bash
@@ -58,6 +65,22 @@ make dev
 ```
 
 Server starts at: `http://localhost:3000`
+
+### 6. Run Background Worker
+
+The worker fetches PRs from GitHub and runs AI code reviews:
+
+```bash
+# In a separate terminal
+make run-worker
+```
+
+**What the worker does:**
+- Polls GitHub for new/updated PRs every 30 seconds (configurable)
+- Runs AI reviews on PRs that need analysis
+- Detects issues: null checks, logic errors, scalability, security, etc.
+- Updates developer and organization metrics automatically
+- Runs continuously in the background
 
 ## API Endpoints
 
@@ -188,12 +211,59 @@ backend/
 └── .env.example      # Environment variables
 ```
 
+## How It Works
+
+1. **Onboard Organization** - Call `POST /api/organizations` with GitHub org details
+2. **Worker Polls GitHub** - Every 30 seconds, fetches new/updated PRs
+3. **AI Reviews Code** - Analyzes diffs and detects issues
+4. **Metrics Calculated** - Developer and org KPIs updated automatically
+5. **Query Metrics** - Use API endpoints to track performance without clicking through UI
+
+## Deployment
+
+### Docker (Recommended)
+
+```bash
+# Build images
+docker build -t code-quality-api -f Dockerfile.api .
+docker build -t code-quality-worker -f Dockerfile.worker .
+
+# Run with docker-compose
+docker-compose up -d
+```
+
+### VPS Deployment
+
+```bash
+# Build binaries
+make build
+
+# Run API server (with systemd or supervisor)
+./bin/api
+
+# Run worker (with systemd or supervisor)
+./bin/worker
+```
+
+## Monitoring
+
+**Worker Logs:**
+```bash
+# Shows PR fetching and review activity
+tail -f logs/worker.log
+```
+
+**Check System Health:**
+```bash
+curl http://localhost:3000/health
+```
+
 ## Next Steps
 
-1. **Add Background Worker** - Run `make run-worker` to process PRs
-2. **Add GitHub Integration** - Implement polling/webhooks
-3. **Add AI Review Service** - Integrate with OpenAI/Anthropic
-4. **Deploy** - Use Docker or deploy to VPS
+1. **Add GitHub Webhooks** - Real-time PR notifications instead of polling
+2. **Add Notifications** - Slack/Email when critical issues found
+3. **Add Historical Trends** - Track metrics over weeks/months
+4. **Add Custom Rules** - Organization-specific coding standards
 
 ## License
 
