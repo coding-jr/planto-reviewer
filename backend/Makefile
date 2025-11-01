@@ -15,9 +15,9 @@ dev: ## Run API server in development mode
 
 build: ## Build binaries
 	@echo "Building API server..."
-	go build -o bin/api cmd/api/main.go
+	CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/api cmd/api/main.go
 	@echo "Building worker..."
-	go build -o bin/worker cmd/worker/main.go
+	CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/worker cmd/worker/main.go
 	@echo "✅ Build complete"
 
 run-api: build ## Run API server

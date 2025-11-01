@@ -14,7 +14,7 @@
     "apiKey": "your-secure-api-key-change-this"
   },
   "database": {
-    "url": "root:password@tcp(localhost:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local"
+    "url": "root@tcp(localhost:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local"
   },
   "worker": {
     "pollingIntervalSeconds": 30
