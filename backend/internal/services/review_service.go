@@ -96,7 +96,7 @@ func (s *ReviewService) reviewPR(pr *models.PullRequest) error {
 		}
 
 		// Post review comment on GitHub PR
-		if err := s.githubService.PostReviewComment(&org, &repo, pr.PRNumber, result.Summary, issues); err != nil {
+		if err := s.githubService.PostInlineReviewComments(&org, &repo, pr.PRNumber, result.Summary, issues); err != nil {
 			fmt.Printf("⚠️  Failed to post GitHub comment on PR #%d: %v\n", pr.PRNumber, err)
 			// Dont fail the whole review if comment posting fails
 		}

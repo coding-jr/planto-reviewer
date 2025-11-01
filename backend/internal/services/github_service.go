@@ -273,8 +273,8 @@ func (s *GitHubService) MarkPRReviewed(prID uint64) error {
 		Error
 }
 
-// PostReviewComment posts a review comment on a GitHub PR
-func (s *GitHubService) PostReviewComment(org *models.Organization, repo *models.Repository, prNumber uint, reviewSummary string, issues []models.Issue) error {
+// PostInlineReviewComments posts review comments on specific lines in the PR
+func (s *GitHubService) PostInlineReviewComments(org *models.Organization, repo *models.Repository, prNumber uint, reviewSummary string, issues []models.Issue) error {
 	ctx := context.Background()
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: org.GithubToken},
@@ -282,110 +282,110 @@ func (s *GitHubService) PostReviewComment(org *models.Organization, repo *models
 	tc := oauth2.NewClient(ctx, ts)
 	client := github.NewClient(tc)
 
-	// Format the review comment
-	comment := formatReviewComment(reviewSummary, issues)
-
-	// Post comment on PR
-	prComment := &github.IssueComment{
-		Body: github.String(comment),
-	}
-
-	_, _, err := client.Issues.CreateComment(ctx, org.GithubOrgName, repo.Name, int(prNumber), prComment)
+	// Get the PR to get the commit SHA
+	pr, _, err := client.PullRequests.Get(ctx, org.GithubOrgName, repo.Name, int(prNumber))
 	if err != nil {
-		return fmt.Errorf("failed to post comment: %w", err)
+		return fmt.Errorf("failed to get PR: %w", err)
 	}
 
-	fmt.Printf("✅ Posted review comment on PR #%d\n", prNumber)
+	// Prepare review comments for issues with file paths and line numbers
+	var comments []*github.DraftReviewComment
+	var generalIssues []models.Issue
+
+	for _, issue := range issues {
+		if issue.FilePath != "" && issue.LineNumber != nil && *issue.LineNumber > 0 {
+			// Create inline comment
+			commentBody := formatInlineIssue(issue)
+			comments = append(comments, &github.DraftReviewComment{
+				Path:     github.String(issue.FilePath),
+				Line:     github.Int(*issue.LineNumber),
+				Body:     github.String(commentBody),
+				Side:     github.String("RIGHT"), // Comment on the new version
+			})
+		} else {
+			// Collect issues without specific line info
+			generalIssues = append(generalIssues, issue)
+		}
+	}
+
+	// Create the review with inline comments
+	reviewBody := formatReviewBody(reviewSummary, generalIssues)
+	
+	review := &github.PullRequestReviewRequest{
+		CommitID: pr.Head.SHA,
+		Body:     github.String(reviewBody),
+		Event:    github.String("COMMENT"), // Use COMMENT instead of APPROVE/REQUEST_CHANGES
+		Comments: comments,
+	}
+
+	_, _, err = client.PullRequests.CreateReview(ctx, org.GithubOrgName, repo.Name, int(prNumber), review)
+	if err != nil {
+		return fmt.Errorf("failed to create review: %w", err)
+	}
+
+	fmt.Printf("✅ Posted %d inline comments on PR #%d\n", len(comments), prNumber)
 	return nil
 }
 
-// formatReviewComment formats the review into a GitHub comment
-func formatReviewComment(summary string, issues []models.Issue) string {
-	comment := "## 🤖 AI Code Review\n\n"
-	comment += "### Summary\n"
-	comment += summary + "\n\n"
-
-	if len(issues) > 0 {
-		comment += fmt.Sprintf("### Issues Found (%d)\n\n", len(issues))
-
-		// Group by severity
-		criticalIssues := []models.Issue{}
-		highIssues := []models.Issue{}
-		mediumIssues := []models.Issue{}
-		lowIssues := []models.Issue{}
-
-		for _, issue := range issues {
-			switch issue.Severity {
-			case "critical":
-				criticalIssues = append(criticalIssues, issue)
-			case "high":
-				highIssues = append(highIssues, issue)
-			case "medium":
-				mediumIssues = append(mediumIssues, issue)
-			case "low":
-				lowIssues = append(lowIssues, issue)
-			}
-		}
-
-		// Format by severity
-		if len(criticalIssues) > 0 {
-			comment += "#### 🔴 Critical Issues\n"
-			for _, issue := range criticalIssues {
-				comment += formatIssue(issue)
-			}
-		}
-
-		if len(highIssues) > 0 {
-			comment += "#### 🟠 High Priority Issues\n"
-			for _, issue := range highIssues {
-				comment += formatIssue(issue)
-			}
-		}
-
-		if len(mediumIssues) > 0 {
-			comment += "#### 🟡 Medium Priority Issues\n"
-			for _, issue := range mediumIssues {
-				comment += formatIssue(issue)
-			}
-		}
-
-		if len(lowIssues) > 0 {
-			comment += "#### 🟢 Low Priority Issues\n"
-			for _, issue := range lowIssues {
-				comment += formatIssue(issue)
-			}
-		}
-	} else {
-		comment += "### ✅ No Issues Found\n\nGreat job! The code looks good.\n"
-	}
-
-	comment += "\n---\n*Powered by AWS Bedrock Claude Sonnet 4.5*"
-	return comment
-}
-
-// formatIssue formats a single issue
-func formatIssue(issue models.Issue) string {
-	var formatted string
-	formatted += fmt.Sprintf("- **%s** (%s)\n", issue.Title, issue.IssueType)
+// formatInlineIssue formats a single issue for inline comment
+func formatInlineIssue(issue models.Issue) string {
+	var comment string
 	
-	if issue.FilePath != "" {
-		formatted += fmt.Sprintf("  - **File:** `%s`", issue.FilePath)
-		if issue.LineNumber != nil {
-			formatted += fmt.Sprintf(" (Line %d)", *issue.LineNumber)
-		}
-		formatted += "\n"
+	// Severity emoji
+	severityEmoji := map[string]string{
+		"critical": "🔴",
+		"high":     "🟠",
+		"medium":   "🟡",
+		"low":      "🟢",
+	}
+	emoji := severityEmoji[issue.Severity]
+	if emoji == "" {
+		emoji = "⚪"
 	}
 	
-	formatted += fmt.Sprintf("  - **Description:** %s\n", issue.Description)
+	comment += fmt.Sprintf("%s **%s** (%s - %s)\n\n", emoji, issue.Title, issue.Severity, issue.IssueType)
+	comment += fmt.Sprintf("%s\n\n", issue.Description)
 	
 	if issue.Suggestion != nil && *issue.Suggestion != "" {
-		formatted += fmt.Sprintf("  - **Suggestion:** %s\n", *issue.Suggestion)
+		comment += fmt.Sprintf("**💡 Suggestion:**\n%s\n\n", *issue.Suggestion)
 	}
 	
 	if issue.CodeSnippet != nil && *issue.CodeSnippet != "" {
-		formatted += fmt.Sprintf("  - **Code:**\n```\n%s\n```\n", *issue.CodeSnippet)
+		comment += fmt.Sprintf("**Code:**\n```\n%s\n```\n", *issue.CodeSnippet)
 	}
 	
-	formatted += "\n"
-	return formatted
+	return comment
+}
+
+// formatReviewBody formats the summary and general issues for the review body
+func formatReviewBody(summary string, generalIssues []models.Issue) string {
+	body := "## 🤖 AI Code Review\n\n"
+	body += "### Summary\n"
+	body += summary + "\n\n"
+	
+	if len(generalIssues) > 0 {
+		body += "### General Issues\n\n"
+		for _, issue := range generalIssues {
+			severityEmoji := map[string]string{
+				"critical": "🔴",
+				"high":     "🟠",
+				"medium":   "🟡",
+				"low":      "🟢",
+			}
+			emoji := severityEmoji[issue.Severity]
+			if emoji == "" {
+				emoji = "⚪"
+			}
+			
+			body += fmt.Sprintf("%s **%s** (%s)\n", emoji, issue.Title, issue.IssueType)
+			body += fmt.Sprintf("- %s\n", issue.Description)
+			if issue.Suggestion != nil && *issue.Suggestion != "" {
+				body += fmt.Sprintf("- 💡 Suggestion: %s\n", *issue.Suggestion)
+			}
+			body += "\n"
+		}
+	}
+	
+	body += "\n---\n*Powered by AWS Bedrock Claude Sonnet 4.5*"
+	return body
 }
