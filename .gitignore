@@ -15,3 +15,4 @@ backend/.env.production
 # Keep only example files
 !settings.example.json
 !backend/.env.example
+!.env.docker

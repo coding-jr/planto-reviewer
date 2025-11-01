@@ -1,0 +1,121 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: code-quality-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: code_quality_dev
+      MYSQL_USER: ${DB_USER:-codeuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-codepassword}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./backend/scripts/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Server
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: code-quality-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Server Configuration
+      PORT: 3000
+      ENV: production
+
+      # Database Configuration
+      DATABASE_URL: ${DB_USER:-codeuser}:${DB_PASSWORD:-codepassword}@tcp(db:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local
+
+      # AI Provider Configuration
+      AI_PROVIDER: bedrock
+
+      # AWS Bedrock Configuration
+      AWS_REGION: ${AWS_REGION}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK}
+      BEDROCK_MODEL: ${BEDROCK_MODEL:-global.anthropic.claude-sonnet-4-5-20250929-v1:0}
+      BEDROCK_MODEL_ARN: ${BEDROCK_MODEL_ARN}
+      BEDROCK_MAX_TOKENS: ${BEDROCK_MAX_TOKENS:-16192}
+      BEDROCK_TEMPERATURE: ${BEDROCK_TEMPERATURE:-0.3}
+
+      # API Security
+      API_KEY: ${API_KEY}
+
+      # Worker Configuration
+      POLLING_INTERVAL: ${POLLING_INTERVAL:-30}
+    command: /app/api
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Background Worker
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: code-quality-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    environment:
+      # Server Configuration
+      ENV: production
+
+      # Database Configuration
+      DATABASE_URL: ${DB_USER:-codeuser}:${DB_PASSWORD:-codepassword}@tcp(db:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local
+
+      # AI Provider Configuration
+      AI_PROVIDER: bedrock
+
+      # AWS Bedrock Configuration
+      AWS_REGION: ${AWS_REGION}
+      AWS_BEARER_TOKEN_BEDROCK: ${AWS_BEARER_TOKEN_BEDROCK}
+      BEDROCK_MODEL: ${BEDROCK_MODEL:-global.anthropic.claude-sonnet-4-5-20250929-v1:0}
+      BEDROCK_MODEL_ARN: ${BEDROCK_MODEL_ARN}
+      BEDROCK_MAX_TOKENS: ${BEDROCK_MAX_TOKENS:-16192}
+      BEDROCK_TEMPERATURE: ${BEDROCK_TEMPERATURE:-0.3}
+
+      # API Security
+      API_KEY: ${API_KEY}
+
+      # Worker Configuration
+      POLLING_INTERVAL: ${POLLING_INTERVAL:-30}
+    command: /app/worker
+
+  # Frontend Dashboard (Optional)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: code-quality-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3001:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+      NEXT_PUBLIC_API_KEY: ${API_KEY}
+
+volumes:
+  db_data:
