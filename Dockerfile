@@ -9,8 +9,8 @@ RUN apt-get update \
 WORKDIR /usr/src/app
 
 # Copy package files and install npm dependencies
-COPY --chown=node:node package*.json /usr/src/app/
-RUN npm clean-install && npm cache clean --force
+COPY --chown=node:node package.json package-lock.json /usr/src/app/
+RUN npm ci
 
 # Copy source files
 COPY --chown=node:node . /usr/src/app/
