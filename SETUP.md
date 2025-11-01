@@ -22,119 +22,162 @@ Complete guide to set up the Code Quality Tracker with Next.js dashboard and AWS
 
 ### Step 1: Configure Settings
 
-The backend uses `settings.json` in the root directory for configuration. This is the recommended way to configure the application.
+**🔒 SECURITY FIRST:** Never commit credentials to git! Use environment variables (recommended) or a local `settings.json` file (which is git-ignored).
 
-**1.1 Copy the settings file:**
-```bash
-cd /Users/princeofpersia/Desktop/planto-reviewer
-```
+There are **two ways** to configure the application:
 
-**1.2 Edit settings.json:**
+---
 
-There are two authentication methods for AWS Bedrock:
+#### **Option A: Environment Variables (Recommended - Most Secure)**
 
-**Option A: Bedrock API Key Authentication (Recommended - Simpler)**
-```json
-{
-  "aws": {
-    "region": "ap-south-1",
-    "bearerToken": "YOUR_BEDROCK_API_KEY_TOKEN"
-  },
-  "bedrock": {
-    "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "modelArn": "arn:aws:bedrock:ap-south-1:YOUR_ACCOUNT_ID:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "maxTokens": 16192,
-    "temperature": 0.3
-  },
-  "api": {
-    "port": 3000,
-    "apiKey": "your-secure-api-key-here"
-  },
-  "database": {
-    "url": "root:password@tcp(localhost:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local"
-  },
-  "worker": {
-    "pollingIntervalSeconds": 30
-  }
-}
-```
-
-**Option B: IAM Credentials Authentication**
-```json
-{
-  "aws": {
-    "region": "us-east-1",
-    "accessKeyId": "YOUR_AWS_ACCESS_KEY",
-    "secretAccessKey": "YOUR_AWS_SECRET_KEY"
-  },
-  "bedrock": {
-    "model": "anthropic.claude-3-5-sonnet-20241022-v2:0",
-    "maxTokens": 4000,
-    "temperature": 0.3
-  },
-  "api": {
-    "port": 3000,
-    "apiKey": "your-secure-api-key-here"
-  },
-  "database": {
-    "url": "root:password@tcp(localhost:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local"
-  },
-  "worker": {
-    "pollingIntervalSeconds": 30
-  }
-}
-```
-
-**How to Get Bedrock API Key (Option A):**
-1. Go to AWS Console → Bedrock → API Keys
-2. Create a new API key
-3. Copy the bearer token (starts with `ABSK...`)
-4. Paste it into `settings.json` → `aws.bearerToken`
-
-**Important Notes:**
-- **Option A (API Key)** is simpler - just need bearer token and region
-- **Option B (IAM)** requires AWS access key ID and secret access key from IAM
-- Ensure your AWS account has Bedrock access enabled
-- **Claude Sonnet 4.5** model ID: `global.anthropic.claude-sonnet-4-5-20250929-v1:0` (via inference profile)
-- Alternative older model: `anthropic.claude-3-5-sonnet-20241022-v2:0`
-- Change the `apiKey` to a strong random value for API authentication
-- Update database credentials
-- Max tokens: 16192 for Sonnet 4.5, 4000 for older models
-
-**Alternative: Environment Variables**
-
-If you prefer environment variables, create `backend/.env`:
+**1.1 Create environment file:**
 ```bash
 cd backend
 cp .env.example .env
 ```
 
-Edit `.env`:
+**1.2 Edit `backend/.env` with your credentials:**
+
 ```bash
-# Server
+# Server Configuration
 PORT=3000
 ENV=development
 
-# Database
-DATABASE_URL=root:password@tcp(localhost:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local
+# Database Configuration
+DATABASE_URL=root:YOUR_DB_PASSWORD@tcp(localhost:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local
 
-# AI Provider (bedrock, openai, anthropic, or google)
+# AI Provider
 AI_PROVIDER=bedrock
 
-# For Bedrock
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY
-AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_KEY
-BEDROCK_MODEL=anthropic.claude-3-5-sonnet-20241022-v2:0
+# AWS Bedrock Configuration
+AWS_REGION=ap-south-1
 
-# For other providers (if not using Bedrock)
-# AI_API_KEY=sk-your-api-key-here
+# Authentication Method 1: Bearer Token (Recommended - Simpler)
+AWS_BEARER_TOKEN_BEDROCK=YOUR_BEDROCK_API_KEY_HERE
 
-# Security
-API_KEY=your-api-key-for-authentication
+# Authentication Method 2: IAM Credentials (Alternative)
+# AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY
+# AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_KEY
 
-# Worker
+# Bedrock Model Configuration
+BEDROCK_MODEL=global.anthropic.claude-sonnet-4-5-20250929-v1:0
+BEDROCK_MODEL_ARN=arn:aws:bedrock:ap-south-1:YOUR_ACCOUNT_ID:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0
+BEDROCK_MAX_TOKENS=16192
+BEDROCK_TEMPERATURE=0.3
+
+# API Security
+API_KEY=YOUR_SECURE_RANDOM_API_KEY
+
+# Worker Configuration
 POLLING_INTERVAL=30
+```
+
+**How to Get Bedrock API Key:**
+1. Go to **AWS Console** → **Bedrock** → **API Keys**
+2. Click **"Create API Key"**
+3. Copy the bearer token (starts with `ABSK...`)
+4. Paste it into `backend/.env` as `AWS_BEARER_TOKEN_BEDROCK`
+
+---
+
+#### **Option B: settings.json (Alternative)**
+
+**1.1 Copy the example file:**
+```bash
+cp settings.example.json settings.json
+```
+
+**1.2 Edit `settings.json` with your credentials:**
+
+```json
+{
+  "aws": {
+    "region": "ap-south-1",
+    "bearerToken": "YOUR_BEDROCK_API_KEY_HERE"
+  },
+  "bedrock": {
+    "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "modelArn": "arn:aws:bedrock:ap-south-1:YOUR_ACCOUNT_ID:inference-profile/...",
+    "maxTokens": 16192,
+    "temperature": 0.3
+  },
+  "api": {
+    "port": 3000,
+    "apiKey": "YOUR_SECURE_RANDOM_API_KEY"
+  },
+  "database": {
+    "url": "root:YOUR_DB_PASSWORD@tcp(localhost:3306)/code_quality_dev?..."
+  },
+  "worker": {
+    "pollingIntervalSeconds": 30
+  }
+}
+```
+
+**⚠️ Note:** `settings.json` is git-ignored for security. Never commit credentials to version control!
+
+---
+
+#### **Priority Order**
+
+Environment variables **override** settings.json values:
+
+1. **Environment variables** (highest priority)
+2. **settings.json** (fallback)
+
+This allows you to use `settings.json` for defaults and environment variables for sensitive credentials.
+
+---
+
+#### **Important Security Notes**
+
+✅ **DO:**
+- Use environment variables for production
+- Keep credentials in `.env` files (git-ignored)
+- Use strong random API keys
+- Rotate credentials regularly
+
+❌ **DON'T:**
+- Commit credentials to git
+- Share credentials in documentation
+- Use weak or default API keys
+- Store credentials in code comments
+
+---
+
+#### **Available Models**
+
+- **Claude Sonnet 4.5** (Latest, Recommended): `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
+  - Max tokens: 16192
+  - Requires inference profile ARN
+  - Best performance and accuracy
+
+- **Claude 3.5 Sonnet** (Alternative): `anthropic.claude-3-5-sonnet-20241022-v2:0`
+  - Max tokens: 4000
+  - Direct model access
+  - Still very capable
+
+---
+
+#### **Other AI Providers**
+
+If not using Bedrock, you can use other providers by changing `AI_PROVIDER` in `.env`:
+
+```bash
+# For OpenAI
+AI_PROVIDER=openai
+AI_API_KEY=sk-...
+AI_MODEL=gpt-4-turbo-preview
+
+# For Anthropic API
+AI_PROVIDER=anthropic
+AI_API_KEY=sk-ant-...
+AI_MODEL=claude-3-5-sonnet-20241022
+
+# For Google Gemini
+AI_PROVIDER=google
+AI_API_KEY=...
+AI_MODEL=gemini-pro
 ```
 
 ### Step 2: Setup Database

@@ -5,7 +5,7 @@
   },
   "bedrock": {
     "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "modelArn": "",
+    "modelArn": "arn:aws:bedrock:ap-south-1:YOUR_ACCOUNT_ID:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0",
     "maxTokens": 16192,
     "temperature": 0.3
   },
