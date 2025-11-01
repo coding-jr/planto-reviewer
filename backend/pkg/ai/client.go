@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// ReviewClient is the interface for all AI review clients
+type ReviewClient interface {
+	ReviewCode(diff string, context string) (*ReviewResult, error)
+}
+
 type Provider string
 
 const (

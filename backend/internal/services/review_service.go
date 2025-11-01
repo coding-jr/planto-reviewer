@@ -10,17 +10,17 @@ import (
 )
 
 type ReviewService struct {
-	db            *gorm.DB
-	aiClient      *ai.Client
-	githubService *GitHubService
+	db             *gorm.DB
+	aiClient       ai.ReviewClient
+	githubService  *GitHubService
 	metricsService *MetricsService
 }
 
-func NewReviewService(db *gorm.DB, aiClient *ai.Client) *ReviewService {
+func NewReviewService(db *gorm.DB, aiClient ai.ReviewClient) *ReviewService {
 	return &ReviewService{
-		db:            db,
-		aiClient:      aiClient,
-		githubService: NewGitHubService(db),
+		db:             db,
+		aiClient:       aiClient,
+		githubService:  NewGitHubService(db),
 		metricsService: NewMetricsService(db),
 	}
 }

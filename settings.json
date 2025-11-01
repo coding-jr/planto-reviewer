@@ -1,0 +1,22 @@
+{
+  "aws": {
+    "region": "ap-south-1",
+    "bearerToken": "ABSKQmVkcm9ja0FQSUtleS03b2gyLWF0LTU5MDE4MzcwNTQyMDpEZUMvZ0dGWmExaHovemE2Q2lwWXU3Q2F1V3c2SW8yLytuaG5GZ1dnamJSbXFkWHVjZGlRNmp0YmNhVT0="
+  },
+  "bedrock": {
+    "model": "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "modelArn": "arn:aws:bedrock:ap-south-1:590183705420:inference-profile/global.anthropic.claude-sonnet-4-5-20250929-v1:0",
+    "maxTokens": 16192,
+    "temperature": 0.3
+  },
+  "api": {
+    "port": 3000,
+    "apiKey": "your-api-key-here"
+  },
+  "database": {
+    "url": "root:password@tcp(localhost:3306)/code_quality_dev?charset=utf8mb4&parseTime=True&loc=Local"
+  },
+  "worker": {
+    "pollingIntervalSeconds": 30
+  }
+}

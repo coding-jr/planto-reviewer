@@ -18,6 +18,15 @@ type Config struct {
 	EncryptionKey   string
 	APIKey          string
 	PollingInterval int
+	// AWS Bedrock config
+	AWSRegion          string
+	AWSBearerToken     string
+	AWSAccessKeyID     string
+	AWSSecretAccessKey string
+	BedrockModel       string
+	BedrockModelArn    string
+	BedrockMaxTokens   int
+	BedrockTemperature float64
 }
 
 func Load() *Config {

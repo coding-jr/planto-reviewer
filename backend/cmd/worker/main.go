@@ -15,8 +15,11 @@ import (
 )
 
 func main() {
-	// Load configuration
-	cfg := config.Load()
+	// Load configuration (tries settings.json first, then falls back to env)
+	cfg, err := config.LoadWithEnvOverride()
+	if err != nil {
+		log.Fatalf("❌ Failed to load configuration: %v", err)
+	}
 
 	// Connect to database
 	db, err := database.Connect(cfg.DatabaseURL, cfg.Env == "development")
@@ -24,8 +27,38 @@ func main() {
 		log.Fatalf("❌ Failed to connect to database: %v", err)
 	}
 
-	// Initialize AI client
-	aiClient := ai.NewClient(ai.Provider(cfg.AIProvider), cfg.AIAPIKey)
+	// Initialize AI client (supports Bedrock or standard providers)
+	var aiClient ai.ReviewClient
+	if cfg.AIProvider == "bedrock" {
+		bedrockConfig := &ai.BedrockConfig{
+			Region:          cfg.AWSRegion,
+			BearerToken:     cfg.AWSBearerToken,
+			AccessKeyID:     cfg.AWSAccessKeyID,
+			SecretAccessKey: cfg.AWSSecretAccessKey,
+			Model:           cfg.BedrockModel,
+			ModelArn:        cfg.BedrockModelArn,
+			MaxTokens:       cfg.BedrockMaxTokens,
+			Temperature:     cfg.BedrockTemperature,
+		}
+		enhancedClient, err := ai.NewEnhancedClient(ai.Provider(cfg.AIProvider), "", bedrockConfig)
+		if err != nil {
+			log.Fatalf("❌ Failed to create Bedrock client: %v", err)
+		}
+		aiClient = enhancedClient
+
+		// Log which auth method is being used
+		if cfg.AWSBearerToken != "" {
+			log.Printf("✅ Using AWS Bedrock with API Key authentication")
+			log.Printf("ℹ️  Model: %s", cfg.BedrockModel)
+			log.Printf("ℹ️  Region: %s", cfg.AWSRegion)
+		} else {
+			log.Printf("✅ Using AWS Bedrock with IAM authentication")
+			log.Printf("ℹ️  Model: %s", cfg.BedrockModel)
+		}
+	} else {
+		aiClient = ai.NewClient(ai.Provider(cfg.AIProvider), cfg.AIAPIKey)
+		log.Printf("✅ Using %s provider", cfg.AIProvider)
+	}
 
 	// Initialize services
 	githubService := services.NewGitHubService(db)
