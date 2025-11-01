@@ -84,6 +84,24 @@ func (s *ReviewService) reviewPR(pr *models.PullRequest) error {
 		return fmt.Errorf("failed to save review: %w", err)
 	}
 
+	// Get issues for this review
+	var savedReview models.Review
+	if err := s.db.Where("pull_request_id = ?", pr.ID).Order("created_at DESC").First(&savedReview).Error; err != nil {
+		fmt.Printf("⚠️  Failed to fetch review for PR #%d: %v\n", pr.PRNumber, err)
+	} else {
+		// Get issues for this review
+		var issues []models.Issue
+		if err := s.db.Where("review_id = ?", savedReview.ID).Find(&issues).Error; err != nil {
+			fmt.Printf("⚠️  Failed to fetch issues for PR #%d: %v\n", pr.PRNumber, err)
+		}
+
+		// Post review comment on GitHub PR
+		if err := s.githubService.PostReviewComment(&org, &repo, pr.PRNumber, result.Summary, issues); err != nil {
+			fmt.Printf("⚠️  Failed to post GitHub comment on PR #%d: %v\n", pr.PRNumber, err)
+			// Dont fail the whole review if comment posting fails
+		}
+	}
+
 	// Mark PR as reviewed
 	if err := s.githubService.MarkPRReviewed(pr.ID); err != nil {
 		return fmt.Errorf("failed to mark PR as reviewed: %w", err)

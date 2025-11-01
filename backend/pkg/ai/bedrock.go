@@ -1,19 +1,20 @@
 package ai
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/bedrockruntime"
+	"io"
+	"net/http"
 )
 
 // BedrockClient wraps AWS Bedrock client
 type BedrockClient struct {
-	client      *bedrockruntime.BedrockRuntime
+	httpClient  *http.Client
+	bearerToken string
+	region      string
 	model       string
+	modelArn    string
 	maxTokens   int
 	temperature float64
 }
@@ -22,50 +23,26 @@ type BedrockClient struct {
 type BedrockConfig struct {
 	Region          string
 	BearerToken     string // For Bedrock API Key authentication
-	AccessKeyID     string // For IAM authentication
-	SecretAccessKey string // For IAM authentication
+	AccessKeyID     string // For IAM authentication (not used with bearer token)
+	SecretAccessKey string // For IAM authentication (not used with bearer token)
 	Model           string
 	ModelArn        string // Optional: full ARN for inference profile
 	MaxTokens       int
 	Temperature     float64
 }
 
-// NewBedrockClient creates a new Bedrock client
+// NewBedrockClient creates a new Bedrock client using API Key (Bearer Token)
 func NewBedrockClient(config BedrockConfig) (*BedrockClient, error) {
-	var sess *session.Session
-	var err error
-
-	// Use bearer token authentication if provided, otherwise use IAM
-	if config.BearerToken != "" {
-		// Bedrock API Key authentication
-		sess, err = session.NewSession(&aws.Config{
-			Region:      aws.String(config.Region),
-			Credentials: credentials.NewStaticCredentials("", "", config.BearerToken),
-		})
-	} else {
-		// IAM authentication
-		sess, err = session.NewSession(&aws.Config{
-			Region:      aws.String(config.Region),
-			Credentials: credentials.NewStaticCredentials(config.AccessKeyID, config.SecretAccessKey, ""),
-		})
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to create AWS session: %w", err)
-	}
-
-	// Create Bedrock Runtime client
-	svc := bedrockruntime.New(sess)
-
-	// Use ModelArn if provided, otherwise use Model
-	modelID := config.Model
-	if config.ModelArn != "" {
-		modelID = config.ModelArn
+	if config.BearerToken == "" {
+		return nil, fmt.Errorf("bearer token is required for Bedrock API Key authentication")
 	}
 
 	return &BedrockClient{
-		client:      svc,
-		model:       modelID,
+		httpClient:  &http.Client{},
+		bearerToken: config.BearerToken,
+		region:      config.Region,
+		model:       config.Model,
+		modelArn:    config.ModelArn,
 		maxTokens:   config.MaxTokens,
 		temperature: config.Temperature,
 	}, nil
@@ -98,17 +75,42 @@ func (c *BedrockClient) ReviewCode(diff string, context string) (*ReviewResult, 
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Invoke model
-	input := &bedrockruntime.InvokeModelInput{
-		ModelId:     aws.String(c.model),
-		ContentType: aws.String("application/json"),
-		Accept:      aws.String("application/json"),
-		Body:        jsonBody,
+	// Determine which model ID to use
+	modelID := c.model
+	if c.modelArn != "" {
+		modelID = c.modelArn
 	}
 
-	result, err := c.client.InvokeModel(input)
+	// Build Bedrock endpoint URL
+	url := fmt.Sprintf("https://bedrock-runtime.%s.amazonaws.com/model/%s/invoke", c.region, modelID)
+
+	// Create HTTP request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		return nil, fmt.Errorf("failed to invoke model: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.bearerToken))
+
+	// Send request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Check for errors
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bedrock API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	// Parse response
@@ -122,7 +124,7 @@ func (c *BedrockClient) ReviewCode(diff string, context string) (*ReviewResult, 
 		} `json:"usage"`
 	}
 
-	if err := json.Unmarshal(result.Body, &response); err != nil {
+	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
@@ -141,8 +143,8 @@ func (c *BedrockClient) ReviewCode(diff string, context string) (*ReviewResult, 
 
 // Enhanced Client that supports both Bedrock and other providers
 type EnhancedClient struct {
-	provider      Provider
-	bedrockClient *BedrockClient
+	provider       Provider
+	bedrockClient  *BedrockClient
 	standardClient *Client
 }
 

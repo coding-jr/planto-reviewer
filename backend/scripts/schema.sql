@@ -73,6 +73,7 @@ CREATE TABLE pull_requests (
     opened_at TIMESTAMP NOT NULL,
     closed_at TIMESTAMP NULL,
     merged_at TIMESTAMP NULL,
+    needs_review BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,

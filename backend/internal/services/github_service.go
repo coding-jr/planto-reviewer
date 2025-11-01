@@ -272,3 +272,120 @@ func (s *GitHubService) MarkPRReviewed(prID uint64) error {
 		Update("needs_review", false).
 		Error
 }
+
+// PostReviewComment posts a review comment on a GitHub PR
+func (s *GitHubService) PostReviewComment(org *models.Organization, repo *models.Repository, prNumber uint, reviewSummary string, issues []models.Issue) error {
+	ctx := context.Background()
+	ts := oauth2.StaticTokenSource(
+		&oauth2.Token{AccessToken: org.GithubToken},
+	)
+	tc := oauth2.NewClient(ctx, ts)
+	client := github.NewClient(tc)
+
+	// Format the review comment
+	comment := formatReviewComment(reviewSummary, issues)
+
+	// Post comment on PR
+	prComment := &github.IssueComment{
+		Body: github.String(comment),
+	}
+
+	_, _, err := client.Issues.CreateComment(ctx, org.GithubOrgName, repo.Name, int(prNumber), prComment)
+	if err != nil {
+		return fmt.Errorf("failed to post comment: %w", err)
+	}
+
+	fmt.Printf("✅ Posted review comment on PR #%d\n", prNumber)
+	return nil
+}
+
+// formatReviewComment formats the review into a GitHub comment
+func formatReviewComment(summary string, issues []models.Issue) string {
+	comment := "## 🤖 AI Code Review\n\n"
+	comment += "### Summary\n"
+	comment += summary + "\n\n"
+
+	if len(issues) > 0 {
+		comment += fmt.Sprintf("### Issues Found (%d)\n\n", len(issues))
+
+		// Group by severity
+		criticalIssues := []models.Issue{}
+		highIssues := []models.Issue{}
+		mediumIssues := []models.Issue{}
+		lowIssues := []models.Issue{}
+
+		for _, issue := range issues {
+			switch issue.Severity {
+			case "critical":
+				criticalIssues = append(criticalIssues, issue)
+			case "high":
+				highIssues = append(highIssues, issue)
+			case "medium":
+				mediumIssues = append(mediumIssues, issue)
+			case "low":
+				lowIssues = append(lowIssues, issue)
+			}
+		}
+
+		// Format by severity
+		if len(criticalIssues) > 0 {
+			comment += "#### 🔴 Critical Issues\n"
+			for _, issue := range criticalIssues {
+				comment += formatIssue(issue)
+			}
+		}
+
+		if len(highIssues) > 0 {
+			comment += "#### 🟠 High Priority Issues\n"
+			for _, issue := range highIssues {
+				comment += formatIssue(issue)
+			}
+		}
+
+		if len(mediumIssues) > 0 {
+			comment += "#### 🟡 Medium Priority Issues\n"
+			for _, issue := range mediumIssues {
+				comment += formatIssue(issue)
+			}
+		}
+
+		if len(lowIssues) > 0 {
+			comment += "#### 🟢 Low Priority Issues\n"
+			for _, issue := range lowIssues {
+				comment += formatIssue(issue)
+			}
+		}
+	} else {
+		comment += "### ✅ No Issues Found\n\nGreat job! The code looks good.\n"
+	}
+
+	comment += "\n---\n*Powered by AWS Bedrock Claude Sonnet 4.5*"
+	return comment
+}
+
+// formatIssue formats a single issue
+func formatIssue(issue models.Issue) string {
+	var formatted string
+	formatted += fmt.Sprintf("- **%s** (%s)\n", issue.Title, issue.IssueType)
+	
+	if issue.FilePath != "" {
+		formatted += fmt.Sprintf("  - **File:** `%s`", issue.FilePath)
+		if issue.LineNumber != nil {
+			formatted += fmt.Sprintf(" (Line %d)", *issue.LineNumber)
+		}
+		formatted += "\n"
+	}
+	
+	formatted += fmt.Sprintf("  - **Description:** %s\n", issue.Description)
+	
+	if issue.Suggestion != nil && *issue.Suggestion != "" {
+		formatted += fmt.Sprintf("  - **Suggestion:** %s\n", *issue.Suggestion)
+	}
+	
+	if issue.CodeSnippet != nil && *issue.CodeSnippet != "" {
+		formatted += fmt.Sprintf("  - **Code:**\n```\n%s\n```\n", *issue.CodeSnippet)
+	}
+	
+	formatted += "\n"
+	return formatted
+}

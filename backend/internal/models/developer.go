@@ -10,8 +10,8 @@ type Developer struct {
 	Email          *string   `gorm:"size:255" json:"email,omitempty"`
 	Name           *string   `gorm:"size:255" json:"name,omitempty"`
 	AvatarURL      *string   `gorm:"size:512" json:"avatar_url,omitempty"`
-	TotalPRs       int       `gorm:"default:0" json:"total_prs"`
-	TotalCommits   int       `gorm:"default:0" json:"total_commits"`
+	TotalPRs       int       `gorm:"column:total_prs;default:0" json:"total_prs"`
+	TotalCommits   int       `gorm:"column:total_commits;default:0" json:"total_commits"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 
